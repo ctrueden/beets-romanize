@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beets-romanize"
+version = "0.1.0.dev0"
+description = "Latin-script names and titles for beets paths, from MusicBrainz aliases, pseudo-releases and romanization"
+license = "Unlicense"
+authors = [{name = "Curtis Rueden", email = "curtis@rueden.us"}]
+readme = "README.md"
+keywords = ["beets", "music", "romanization", "transliteration", "translation", "romaji"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+
+requires-python = ">=3.10"
+dependencies = [
+    "beets>=2.0",
+    "confuse",
+    "requests",
+]
+
+[project.optional-dependencies]
+japanese = [
+    "cutlet",
+    "unidic-lite",
+]
+
+[dependency-groups]
+dev = [
+    "build",
+    "cutlet",
+    "pytest",
+    "ruff",
+    "unidic-lite",
+    "validate-pyproject[all]",
+]
+
+[project.urls]
+homepage = "https://github.com/ctrueden/beets-romanize"
+documentation = "https://github.com/ctrueden/beets-romanize/blob/main/README.md"
+source = "https://github.com/ctrueden/beets-romanize"
+download = "https://pypi.org/project/beets-romanize/"
+tracker = "https://github.com/ctrueden/beets-romanize/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
+extend-exclude = ["bin", "build", "dist"]
+
+#[tool.ruff.lint]
+#extend-ignore = ["E203"]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore `F401` (unused import violation) in __init__.py.
+"__init__.py" = ["F401"]
