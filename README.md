@@ -150,7 +150,8 @@ Lookups are kept, so that paths stay the same until you ask otherwise:
   and `transl_release` (albums, or singleton items) the MBID of the
   pseudo-release used, or `none` if there is none. The first two have the same
   names as in beets' `mbpseudo` plugin. They are not written to the files'
-  tags.
+  tags. Existing values (e.g. from `mbpseudo`) are kept unless a Latin title
+  is found to replace them.
 
 ## Related
 

@@ -86,10 +86,23 @@ class TestRomanizePlugin(PluginTestHelper):
     def test_no_pseudo_release(self, monkeypatch):
         monkeypatch.setattr(musicbrainz, "get", lambda *a, **k: {"relations": []})
         album = self._album()
+        kept = next(i for i in album.items() if i.track == 3)
+        kept["title_transl"] = "Aoi Inori"  # e.g. from mbpseudo
+        kept.store()
         self.run_command("romanize")
         album.load()
         assert album[romanize.CHECKED] == "none"
-        assert all("title_transl" not in i for i in album.items())
+        titles_by_track = {i.track: i.get("title_transl") for i in album.items()}
+        assert titles_by_track == {1: None, 2: None, 3: "Aoi Inori"}
+
+    def test_log_reports_what_was_stored(self, fake_mb, caplog):
+        self._album()
+        with caplog.at_level("INFO", logger="beets.romanize"):
+            self.run_command("romanize")
+        assert (
+            "Heart of Air - ブルー・フロウ -> "
+            "Blue Flow, 2/3 track titles (eng translation)"
+        ) in caplog.messages
 
     def test_skips_latin_and_non_musicbrainz(self, fake_mb):
         self.add_item(title="Latin", album="Latin", mb_albumid=MBID)

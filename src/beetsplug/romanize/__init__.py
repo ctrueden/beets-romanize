@@ -181,19 +181,22 @@ class RomanizePlugin(BeetsPlugin):
             looked_up += 1
             if result:
                 found += 1
-            store_titles(album, group, result)
+            album_latin, tracks = store_titles(album, group, result)
             if verbose:
                 name = f"{group[0].albumartist} - {album_title}"
-                if result:
-                    self._log.info(
-                        "{} -> {} ({} {})",
-                        name,
-                        result["album"] or album_title,
-                        result["language"],
-                        result["kind"],
-                    )
-                else:
+                if not result:
                     self._log.info("{} -> (no pseudo-release)", name)
+                    continue
+                found_titles = [album_latin] if album_latin else []
+                if tracks:
+                    found_titles.append(f"{tracks}/{len(group)} track titles")
+                self._log.info(
+                    "{} -> {} ({} {})",
+                    name,
+                    ", ".join(found_titles) or "(nothing new)",
+                    result["language"],
+                    result["kind"],
+                )
         if verbose:
             self._log.info(
                 "Looked up {} releases; {} with Latin titles.", looked_up, found
@@ -201,43 +204,43 @@ class RomanizePlugin(BeetsPlugin):
 
 
 def store_titles(album, items, result):
-    """Store a titles.lookup() result (or None) on an album and its items."""
+    """Store a titles.lookup() result (or None) on an album and its items.
+
+    Latin titles found are stored; existing ones (e.g. from mbpseudo) are
+    kept where none is found. Returns the Latin album title stored (or None)
+    and the number of Latin track titles stored.
+    """
     release = result["release"] if result else "none"
+    album_latin, tracks = None, 0
     if album is not None:
         album[CHECKED] = release
-        _set(album, "album_transl", result and _latin_for(album.album, result["album"]))
+        album_latin = _set(
+            album, "album_transl", album.album, result and result["album"]
+        )
         album.store(inherit=False)
     for item in items:
         if album is None:
             item[CHECKED] = release
-            _set(
-                item,
-                "album_transl",
-                result and _latin_for(item.album, result["album"]),
+            album_latin = _set(
+                item, "album_transl", item.album, result and result["album"]
             )
-        _set(
+        if _set(
             item,
             "title_transl",
-            result and _latin_for(item.title, titles.track_title(result, item)),
-        )
+            item.title,
+            result and titles.track_title(result, item),
+        ):
+            tracks += 1
         item.store()
+    return album_latin, tracks
 
 
-def _latin_for(original, latin):
-    """The Latin form to store for an original title, if it needs one."""
+def _set(obj, key, original, latin):
+    """Store the Latin form of a non-Latin original, if found; return it."""
     if not original or is_latin(original) or not latin:
         return None
+    obj[key] = latin
     return latin
-
-
-def _set(obj, key, value):
-    if value:
-        obj[key] = value
-    else:
-        try:
-            del obj[key]
-        except KeyError:
-            pass
 
 
 ### Template fields ###
