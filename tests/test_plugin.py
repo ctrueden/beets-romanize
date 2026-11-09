@@ -1,6 +1,7 @@
 # This is free and unencumbered software released into the public domain.
 # See https://unlicense.org/ for details.
 
+import copy
 from typing import ClassVar
 
 import pytest
@@ -126,3 +127,38 @@ class TestRomanizePlugin(PluginTestHelper):
     def test_romanization_fallback(self):
         item = self.add_item(title="この誰もいない部屋で")
         assert item.evaluate_template("$title_latin") == "Kono dare mo inai heya de"
+
+    def test_other_fields(self):
+        monkey = {"梶浦由記": "Yuki Kajiura"}
+        aliases._names = monkey
+        item = self.add_item(
+            title="t", composers=["梶浦由記", "Nobuo Uematsu"], label="満-MITSURU-"
+        )
+        self.config["romanize"]["overrides"] = {"満-MITSURU-": "MITSURU"}
+        romanize.text.reset()
+        assert item.evaluate_template("$composers_latin") == (
+            "Yuki Kajiura; Nobuo Uematsu"
+        )
+        assert item.evaluate_template("$label_latin") == "MITSURU"
+        aliases.reset()
+
+    def test_fetch_disc_titles(self, monkeypatch):
+        official = copy.deepcopy(OFFICIAL)
+        official["media"][0]["title"] = "第一部"
+        pseudos = copy.deepcopy(PSEUDOS)
+        pseudos["romaji"]["media"][0]["title"] = "Dai Ichibu"
+        monkeypatch.setattr(
+            musicbrainz,
+            "get",
+            lambda entity, mbid, inc="", retries=4: (
+                official if mbid == MBID else pseudos[mbid]
+            ),
+        )
+        album = self._album()
+        for item in album.items():
+            item.disctitle = "第一部"
+            item.store()
+        self.run_command("romanize")
+        for item in album.items():
+            assert item["disctitle_transl"] == "Dai Ichibu"
+            assert item.evaluate_template("$disctitle_latin") == "Dai Ichibu"

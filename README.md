@@ -104,18 +104,26 @@ kana.
 
 ## Path fields and functions
 
-| Field                | For           | Value                          |
-|----------------------|---------------|--------------------------------|
-| `$title_latin`       | items         | Latin form of the title        |
-| `$artist_latin`      | items         | Latin form of the artist       |
-| `$album_latin`       | items, albums | Latin form of the album title  |
-| `$albumartist_latin` | items, albums | Latin form of the album artist |
+Every field below has a Latin form as a `_latin` field: `$title_latin`,
+`$artist_latin`, `$composers_latin` and so on.
+
+| Kind | Fields | Latin form from |
+|---|---|---|
+| Titles | `title`, `album`, `disctitle` | pseudo-release, else romanization |
+| | `work`, `grouping`, `release_group_title` | romanization |
+| Artists | `artist`, `albumartist`, plus their `_sort` and `_credit` forms and the lists `artists`, `albumartists`, etc. | MusicBrainz artist names, else romanization |
+| Other people, labels | `composers`, `lyricists`, `arrangers`, `remixers`, `composer_sort`, `label` | known artist names, else romanization |
+
+All of them apply the overrides and symbols first. Names capitalize every
+romanized word (`Amano Tsuki`); titles capitalize only the first (`Kono dare
+mo...`). Album fields (`album`, `albumartist...`, `label`,
+`release_group_title`) have `_latin` fields for albums too. Lists come out as
+beets shows them, e.g. `Yuki Kajiura; Nobuo Uematsu`.
 
 The template functions `%romanize{text}` and `%romanize_name{text}` romanize
-any other value (e.g. `%romanize_name{$composer}`). They apply the overrides,
-known artist names, symbols and romanization, but not pseudo-release titles,
-which belong to a particular item or album. Names capitalize every romanized
-word (`Amano Tsuki`); titles capitalize only the first (`Kono dare mo...`).
+any other value, as a title or a name. They apply the overrides, known artist
+names, symbols and romanization, but not pseudo-release titles, which belong
+to a particular item or album.
 
 Kanji are read as Japanese unless the item's `script` or `language` is Chinese
 or Korean. To fix a misread release, set those fields, e.g.
@@ -130,8 +138,8 @@ or Korean. To fix a misread release, set those fields, e.g.
   locales of beets' `import.languages` are preferred (English if that is
   empty), then any `-Latn` locale, then the artist's Latin sort name
   (`Yaida, Hitomi` → `Hitomi Yaida`).
-- **Titles:** for releases with non-Latin album or track titles, Latin titles
-  from their pseudo-releases.
+- **Titles:** for releases with non-Latin album, disc or track titles, Latin
+  titles from their pseudo-releases.
 
 Use `-f` to look up again what is already known.
 
@@ -194,10 +202,11 @@ Lookups are kept, so that paths stay the same until you ask otherwise:
   `beet romanize`, but treat it like a lockfile rather than a cache: if
   MusicBrainz changes in the meantime, regenerating it can rename folders.
 - **Titles** go in the beets database as flexible attributes:
-  `title_transl` (items) and `album_transl` (albums) hold the Latin titles;
+  `title_transl` and `disctitle_transl` (items) and `album_transl` (albums)
+  hold the Latin titles;
   `transl_release` holds the MBID of the pseudo-release used, or `none` if
-  there is none. The first two have the same names as in beets' `mbpseudo`
-  plugin. They are not written to the files' tags. Existing values (e.g. from
+  there is none. `title_transl` and `album_transl` have the same names as in
+  beets' `mbpseudo` plugin. They are not written to the files' tags. Existing values (e.g. from
   `mbpseudo`) are kept unless a Latin title is found to replace them.
 
 ## Related

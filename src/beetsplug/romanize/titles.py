@@ -76,6 +76,7 @@ def lookup(mbid, languages, prefer=TRANSLATION):
     - `album`: the Latin album title, or None.
     - `tracks`: Latin titles keyed by the original release's track IDs.
     - `positions`: the same, keyed by (disc, track) number.
+    - `discs`: Latin disc titles, keyed by disc number.
     """
     release = musicbrainz.get("release", mbid, inc="release-rels recordings")
     return resolve(
@@ -93,8 +94,10 @@ def resolve(release, fetch, languages, prefer=TRANSLATION):
         return None
 
     official = _positions(release)
+    official_discs = _disc_titles(release)
     album = None
     positions = {}
+    discs = {}
     for _, _, pseudo_id in choices:
         pseudo = fetch(pseudo_id)
         if album is None and is_latin(pseudo.get("title") or ""):
@@ -103,7 +106,14 @@ def resolve(release, fetch, languages, prefer=TRANSLATION):
             title = track.get("title")
             if position not in positions and title and is_latin(title):
                 positions[position] = title
-        if album and len(positions) >= len(official):
+        for disc, title in _disc_titles(pseudo).items():
+            if disc not in discs and is_latin(title):
+                discs[disc] = title
+        if (
+            album
+            and len(positions) >= len(official)
+            and len(discs) >= len(official_discs)
+        ):
             break  # Everything found; skip less preferred pseudo-releases.
 
     kind, language, pseudo_id = choices[0]
@@ -118,6 +128,16 @@ def resolve(release, fetch, languages, prefer=TRANSLATION):
             if pos in official
         },
         "positions": positions,
+        "discs": discs,
+    }
+
+
+def _disc_titles(release):
+    """Map disc numbers of a release to their titles, where they have one."""
+    return {
+        medium.get("position"): medium["title"]
+        for medium in release.get("media", [])
+        if medium.get("title")
     }
 
 
@@ -127,3 +147,8 @@ def track_title(result, item):
     if trackid and trackid in result["tracks"]:
         return result["tracks"][trackid]
     return result["positions"].get((item.get("disc") or 1, item.get("track")))
+
+
+def disc_title(result, item):
+    """The Latin disc title for an item from a lookup() result, or None."""
+    return result.get("discs", {}).get(item.get("disc") or 1)

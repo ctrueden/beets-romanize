@@ -1,6 +1,8 @@
 # This is free and unencumbered software released into the public domain.
 # See https://unlicense.org/ for details.
 
+import copy
+
 from beetsplug.romanize import titles
 
 OFFICIAL = {
@@ -128,3 +130,23 @@ def test_track_title():
     # Without a release track ID, fall back to the position.
     assert titles.track_title(result, {"disc": 1, "track": 3}) == "Aoi Inori"
     assert titles.track_title(result, {"disc": 2, "track": 1}) is None
+
+
+def _with_disc_title(release, title):
+    release = copy.deepcopy(release)
+    release["media"][0]["title"] = title
+    return release
+
+
+def test_resolve_disc_titles():
+    # Only the less preferred pseudo-release has a Latin disc title.
+    official = _with_disc_title(OFFICIAL, "第一部")
+    pseudos = {
+        "english": _with_disc_title(PSEUDOS["english"], "第一部"),
+        "romaji": _with_disc_title(PSEUDOS["romaji"], "Dai Ichibu"),
+    }
+    result = titles.resolve(official, pseudos.__getitem__, ["eng"])
+    assert result["discs"] == {1: "Dai Ichibu"}
+    assert titles.disc_title(result, {"disc": 1}) == "Dai Ichibu"
+    assert titles.disc_title(result, {}) == "Dai Ichibu"  # disc 1 by default
+    assert titles.disc_title(result, {"disc": 2}) is None

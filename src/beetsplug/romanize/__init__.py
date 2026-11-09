@@ -7,23 +7,24 @@
 
 - Latin names for every non-Latin artist and album artist credit not already
   known, from MusicBrainz aliases (see aliases.py).
-- Latin album and track titles from MusicBrainz pseudo-releases, for releases
-  with non-Latin titles not already looked up (see titles.py), into the
-  flexible attributes `album_transl` and `title_transl`.
+- Latin album, disc and track titles from MusicBrainz pseudo-releases, for
+  releases with non-Latin titles not already looked up (see titles.py), into
+  the flexible attributes `album_transl`, `disctitle_transl` and
+  `title_transl`.
 
 `-f` looks everything up again. With `auto` (the default), newly imported
 music is looked up during import, before its files are moved.
 
-Path formats then use the fields `$title_latin`, `$album_latin`,
-`$artist_latin` and `$albumartist_latin`, or the template functions
-`%romanize{text}` and `%romanize_name{text}`; see text.py for what they do.
+Path formats then use the `_latin` fields (`$title_latin`, `$artist_latin`,
+`$composer_latin`...; see fields.py), or the template functions
+`%romanize{text}` and `%romanize_name{text}` (see text.py).
 """
 
 import requests
 from beets import ui
 from beets.plugins import BeetsPlugin
 
-from . import aliases, musicbrainz, text, titles
+from . import aliases, fields, musicbrainz, text, titles
 from .scripts import is_latin
 
 # Errors from a MusicBrainz lookup: network trouble or unexpected data.
@@ -59,20 +60,12 @@ class RomanizePlugin(BeetsPlugin):
             # before its files are moved, so paths use the Latin forms.
             self.import_stages = [self.import_stage]
 
-        self.template_fields.update(
-            {
-                "title_latin": _title_latin,
-                "album_latin": _album_latin,
-                "artist_latin": lambda item: text.romanize_name(item.artist, item),
-                "albumartist_latin": _albumartist_latin,
-            }
-        )
-        self.album_template_fields.update(
-            {
-                "album_latin": _album_latin,
-                "albumartist_latin": _albumartist_latin,
-            }
-        )
+        # A `_latin` field for each romanized field, e.g. $title_latin.
+        for field in fields.FIELDS.values():
+            func = _latin_func(field)
+            self.template_fields[f"{field.key}_latin"] = func
+            if field.album:
+                self.album_template_fields[f"{field.key}_latin"] = func
         self.template_funcs.update(
             {
                 "romanize": text.romanize,
@@ -167,7 +160,8 @@ class RomanizePlugin(BeetsPlugin):
             if not musicbrainz.is_mbid(mbid):
                 continue
             if is_latin(album_title or "") and all(
-                is_latin(item.title or "") for item in group
+                is_latin(item.title or "") and is_latin(item.disctitle or "")
+                for item in group
             ):
                 continue  # Nothing to romanize.
             holder = album if album is not None else group[0]
@@ -181,13 +175,15 @@ class RomanizePlugin(BeetsPlugin):
             looked_up += 1
             if result:
                 found += 1
-            album_latin, tracks = store_titles(album, group, result)
+            album_latin, discs, tracks = store_titles(album, group, result)
             if verbose:
                 name = f"{group[0].albumartist} - {album_title}"
                 if not result:
                     self._log.info("{} -> (no pseudo-release)", name)
                     continue
                 found_titles = [album_latin] if album_latin else []
+                if discs:
+                    found_titles.append(f"{discs} disc titles")
                 if tracks:
                     found_titles.append(f"{tracks}/{len(group)} track titles")
                 self._log.info(
@@ -207,11 +203,12 @@ def store_titles(album, items, result):
     """Store a titles.lookup() result (or None) on an album and its items.
 
     Latin titles found are stored; existing ones (e.g. from mbpseudo) are
-    kept where none is found. Returns the Latin album title stored (or None)
-    and the number of Latin track titles stored.
+    kept where none is found. Returns the Latin album title stored (or None),
+    and the numbers of Latin disc and track titles stored.
     """
     release = result["release"] if result else "none"
     album_latin, tracks = None, 0
+    discs = set()
     if album is not None:
         album[CHECKED] = release
         album_latin = _set(
@@ -231,8 +228,15 @@ def store_titles(album, items, result):
             result and titles.track_title(result, item),
         ):
             tracks += 1
+        if _set(
+            item,
+            "disctitle_transl",
+            item.disctitle,
+            result and titles.disc_title(result, item),
+        ):
+            discs.add(item.disc or 1)
         item.store()
-    return album_latin, tracks
+    return album_latin, len(discs), tracks
 
 
 def _set(obj, key, original, latin):
@@ -246,13 +250,8 @@ def _set(obj, key, original, latin):
 ### Template fields ###
 
 
-def _title_latin(item):
-    return text.romanize(text.latin_field(item, "title", "title_transl"), item)
-
-
-def _album_latin(obj):
-    return text.romanize(text.latin_field(obj, "album", "album_transl"), obj)
-
-
-def _albumartist_latin(obj):
-    return text.romanize_name(obj.get("albumartist"), obj)
+def _latin_func(field):
+    if field.multi:
+        # As beets formats lists: "a; b".
+        return lambda obj: "; ".join(fields.latin(obj, field.key))
+    return lambda obj: fields.latin(obj, field.key)
