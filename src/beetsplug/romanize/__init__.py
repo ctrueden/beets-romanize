@@ -7,6 +7,8 @@
 
 - Latin names for every non-Latin artist and album artist credit not already
   known, from MusicBrainz aliases (see aliases.py).
+- Latin names for composers, lyricists, arrangers and remixers, the same way,
+  for releases not already looked up (see people.py).
 - Latin album, disc and track titles from MusicBrainz pseudo-releases, for
   releases with non-Latin titles not already looked up (see titles.py), into
   the flexible attributes `album_transl`, `disctitle_transl` and
@@ -29,7 +31,7 @@ from beets import ui
 from beets.plugins import BeetsPlugin
 from mediafile import UnreadableFileError
 
-from . import aliases, fields, musicbrainz, text, titles
+from . import aliases, fields, musicbrainz, people, text, titles
 from . import tags as _tags
 from .scripts import is_latin
 
@@ -40,6 +42,10 @@ _LOOKUP_ERRORS = (requests.RequestException, ValueError, KeyError, TypeError)
 # release has none), so that releases are not looked up again.
 CHECKED = "transl_release"
 
+# Flexible attribute recording the release whose people's names were looked
+# up, so that it is not looked up again.
+PEOPLE_CHECKED = "transl_people"
+
 
 class RomanizePlugin(BeetsPlugin):
     def __init__(self):
@@ -48,6 +54,7 @@ class RomanizePlugin(BeetsPlugin):
             {
                 "auto": True,
                 "titles": True,
+                "people": True,
                 "languages": ["eng"],
                 "prefer": titles.TRANSLATION,
                 "overrides": {},
@@ -110,6 +117,8 @@ class RomanizePlugin(BeetsPlugin):
             items = list(lib.items(args))
             if not opts.pretend:
                 self.fetch_names(items, force=opts.force, verbose=True)
+                if self.config["people"].get(bool):
+                    self.fetch_people(items, force=opts.force, verbose=True)
                 if self.config["titles"].get(bool):
                     self.fetch_titles(items, force=opts.force, verbose=True)
             if self.tag_mode:
@@ -125,6 +134,8 @@ class RomanizePlugin(BeetsPlugin):
             return
         items = task.imported_items()
         self.fetch_names(items)
+        if self.config["people"].get(bool):
+            self.fetch_people(items)
         if self.config["titles"].get(bool):
             self.fetch_titles(items)
 
@@ -187,24 +198,62 @@ class RomanizePlugin(BeetsPlugin):
                 "Fetched {} credits; learned {} artist names.", fetched, learned
             )
 
+    ### Other people ###
+
+    def fetch_people(self, items, force=False, verbose=False):
+        cache = {}  # artist ID -> Latin name
+        looked_up = learned = 0
+        for album, group in _releases(items):
+            wanted = set().union(*(people.names(item) for item in group))
+            if not force:
+                wanted = {name for name in wanted if not aliases.known(name)}
+            if not wanted:
+                continue
+            holder = album if album is not None else group[0]
+            entity, mbid = "release", group[0].mb_albumid
+            if not musicbrainz.is_mbid(mbid):
+                entity, mbid = "recording", group[0].mb_trackid
+            if not musicbrainz.is_mbid(mbid):
+                continue
+            if holder.get(PEOPLE_CHECKED) == mbid and not force:
+                continue
+
+            ids = {}
+            for item in group:
+                ids.update(people.item_ids(item))
+            try:
+                matched = people.match(wanted, ids)
+                if len(matched) < len(wanted):
+                    ids = people.lookup(entity, mbid) | ids
+                    matched = people.match(wanted, ids)
+                for name, artist_id in sorted(matched.items()):
+                    latin = people.learn(name, artist_id, cache)
+                    learned += bool(latin)
+                    if verbose:
+                        self._log.info("{} -> {}", name, latin or "(no Latin name)")
+            except _LOOKUP_ERRORS as e:
+                self._log.warning("{} {}: {}", entity, mbid, e)
+                continue
+            looked_up += 1
+            for obj in [album] if album is not None else group:
+                obj[PEOPLE_CHECKED] = mbid
+                obj.store(**({"inherit": False} if obj is album else {}))
+            if looked_up % 10 == 0:
+                aliases.save()
+        if looked_up:
+            aliases.save()
+        if verbose:
+            self._log.info(
+                "Looked up people for {} releases; learned {} names.",
+                looked_up,
+                learned,
+            )
+
     ### Titles ###
 
     def fetch_titles(self, items, force=False, verbose=False):
-        # Group items by album (or by release, for singletons).
-        groups = {}
-        for item in items:
-            key = (
-                ("album", item.album_id)
-                if item.album_id
-                else ("release", item.mb_albumid)
-            )
-            groups.setdefault(key, []).append(item)
-
         looked_up = found = 0
-        for (kind, _), group in groups.items():
-            album = group[0].get_album() if kind == "album" else None
-            if album is not None:
-                group = list(album.items())
+        for album, group in _releases(items):
             mbid = group[0].mb_albumid
             album_title = album.album if album else group[0].album
             if not musicbrainz.is_mbid(mbid):
@@ -247,6 +296,24 @@ class RomanizePlugin(BeetsPlugin):
             self._log.info(
                 "Looked up {} releases; {} with Latin titles.", looked_up, found
             )
+
+
+def _releases(items):
+    """Group items by album (or by release, for singletons).
+
+    Yields (album or None, items); for an album, all of its items.
+    """
+    groups = {}
+    for item in items:
+        key = (
+            ("album", item.album_id) if item.album_id else ("release", item.mb_albumid)
+        )
+        groups.setdefault(key, []).append(item)
+    for (kind, _), group in groups.items():
+        album = group[0].get_album() if kind == "album" else None
+        if album is not None:
+            group = list(album.items())
+        yield album, group
 
 
 def store_titles(album, items, result):

@@ -67,6 +67,11 @@ def lookup(name):
     return names().get(name) if name else None
 
 
+def remember(name, latin):
+    """Record the Latin form of a name (None if there is none)."""
+    names()[name] = latin if latin and latin != name else None
+
+
 def known(name):
     """Whether name has been looked up already (even if nothing was found)."""
     return name in names()
