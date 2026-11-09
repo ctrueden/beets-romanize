@@ -143,6 +143,9 @@ or Korean. To fix a misread release, set those fields, e.g.
 
 Use `-f` to look up again what is already known.
 
+In [tag mode](#tag-mode), `beet romanize` then writes the files whose tags are
+out of date. `beet romanize -p` only lists them, and looks nothing up.
+
 Only music matched to MusicBrainz (with an `mb_albumid` or `mb_trackid`) can
 be looked up; everything else gets only the overrides, symbols and
 romanization.
@@ -159,6 +162,7 @@ romanize:
   prefer: translation    # or: transliteration
   foreign_spelling: no   # cutlet: モノクロレター -> "Monochrome letter"
   overrides: {}          # original text -> Latin form
+  tags: no               # write Latin forms to the files' tags too
 ```
 
 ### Translation or transliteration?
@@ -193,6 +197,43 @@ loanwords (モノクロレター → `Monochrome letter` rather than `Monokuro
 retaa`). That is often nicer, but sometimes wrong: シャープネル (DJ Sharpnel)
 becomes `sharp flannel`.
 
+### Tag mode
+
+By default, the plugin changes only paths: the beets database and your files'
+tags keep the original values. With `tags: yes`, the files' tags get the
+Latin forms too, so music players show them, while the database keeps the
+originals:
+
+| | Database | File tags |
+|---|---|---|
+| Title | `title`: 硝子の夢 | `TITLE`: Glass no Yume, `TITLE_ORIGINAL`: 硝子の夢 |
+| Composers | `composers`: 梶浦由記; Nobuo Uematsu | `COMPOSER`: Yuki Kajiura; Nobuo Uematsu, `COMPOSERS_ORIGINAL`: 梶浦由記; Nobuo Uematsu |
+
+Every romanized field that beets writes to files is covered (all those under
+[Path fields and functions](#path-fields-and-functions) except `work` and
+`release_group_title`). A `*_ORIGINAL` tag is added only where the Latin form
+differs. These are ordinary custom tags in each format (ID3 `TXXX` frames,
+Vorbis comments, MP4 freeform atoms, APEv2 and ASF attributes); players
+ignore them.
+
+Since the database keeps the originals, `beet mbsync`, re-imports and
+`beet modify` work as usual, and the Latin forms are recomputed whenever a
+file is written. When reading files, beets reads a field's `*_ORIGINAL` tag
+where there is one, so `beet update` and imports never mistake the Latin
+forms for new values, and `beet write` does not count them as changes. That
+also means `beet write` cannot tell when the Latin forms in a file are out of
+date, so use `beet romanize` for that:
+
+- **Turning tag mode on:** run `beet romanize` to write the Latin forms to
+  your files. `beet romanize -p` lists which files would change first.
+- **After changing overrides** (or anything else that changes Latin forms):
+  `beet romanize` again. It writes only files whose tags would change.
+- **Turning tag mode off:** run `beet write`, which restores the original
+  values and removes the `*_ORIGINAL` tags.
+
+If another program changes a file's tags, beets still reads the
+`*_ORIGINAL` values; so to change a value, change it in beets.
+
 ## Where the data is kept
 
 Lookups are kept, so that paths stay the same until you ask otherwise:
@@ -203,11 +244,12 @@ Lookups are kept, so that paths stay the same until you ask otherwise:
   MusicBrainz changes in the meantime, regenerating it can rename folders.
 - **Titles** go in the beets database as flexible attributes:
   `title_transl` and `disctitle_transl` (items) and `album_transl` (albums)
-  hold the Latin titles;
-  `transl_release` holds the MBID of the pseudo-release used, or `none` if
-  there is none. `title_transl` and `album_transl` have the same names as in
-  beets' `mbpseudo` plugin. They are not written to the files' tags. Existing values (e.g. from
-  `mbpseudo`) are kept unless a Latin title is found to replace them.
+  hold the Latin titles; `transl_release` holds the MBID of the
+  pseudo-release used, or `none` if there is none. `title_transl` and
+  `album_transl` have the same names as in beets' `mbpseudo` plugin. They are
+  not written to the files' tags (in tag mode, the Latin forms are, as
+  `TITLE` and so on). Existing values (e.g. from `mbpseudo`) are kept unless a
+  Latin title is found to replace them.
 
 ## Related
 

@@ -15,6 +15,10 @@
 `-f` looks everything up again. With `auto` (the default), newly imported
 music is looked up during import, before its files are moved.
 
+With `tags`, the files' tags get the Latin forms too, keeping the originals
+in *_ORIGINAL tags (see tags.py); `beet romanize` then also writes the files
+whose tags are out of date, or with `-p`, only lists them.
+
 Path formats then use the `_latin` fields (`$title_latin`, `$artist_latin`,
 `$composer_latin`...; see fields.py), or the template functions
 `%romanize{text}` and `%romanize_name{text}` (see text.py).
@@ -23,8 +27,10 @@ Path formats then use the `_latin` fields (`$title_latin`, `$artist_latin`,
 import requests
 from beets import ui
 from beets.plugins import BeetsPlugin
+from mediafile import UnreadableFileError
 
 from . import aliases, fields, musicbrainz, text, titles
+from . import tags as _tags
 from .scripts import is_latin
 
 # Errors from a MusicBrainz lookup: network trouble or unexpected data.
@@ -46,6 +52,7 @@ class RomanizePlugin(BeetsPlugin):
                 "prefer": titles.TRANSLATION,
                 "overrides": {},
                 "foreign_spelling": False,
+                "tags": False,
             }
         )
         self.prefer = self.config["prefer"].as_choice(
@@ -54,6 +61,13 @@ class RomanizePlugin(BeetsPlugin):
         self.languages = self.config["languages"].as_str_seq()
         aliases.reset()
         text.reset()
+
+        self.tag_mode = self.config["tags"].get(bool)
+        _tags.register()
+        _tags.read_originals(self.tag_mode)
+        # Even with tag mode off, so that `beet write` removes the *_ORIGINAL
+        # tags left from when it was on.
+        self.register_listener("write", self.on_write)
 
         if self.config["auto"].get(bool):
             # A plugin stage runs after the music is added to the library and
@@ -84,12 +98,24 @@ class RomanizePlugin(BeetsPlugin):
             action="store_true",
             help="look up names and titles again, even if already known",
         )
+        cmd.parser.add_option(
+            "-p",
+            "--pretend",
+            action="store_true",
+            help="with tag mode, only list the files whose tags would change "
+            "(and look nothing up)",
+        )
 
         def func(lib, opts, args):
             items = list(lib.items(args))
-            self.fetch_names(items, force=opts.force, verbose=True)
-            if self.config["titles"].get(bool):
-                self.fetch_titles(items, force=opts.force, verbose=True)
+            if not opts.pretend:
+                self.fetch_names(items, force=opts.force, verbose=True)
+                if self.config["titles"].get(bool):
+                    self.fetch_titles(items, force=opts.force, verbose=True)
+            if self.tag_mode:
+                self.sync_tags(items, pretend=opts.pretend)
+            elif opts.pretend:
+                self._log.info("Tag mode is off; nothing to write.")
 
         cmd.func = func
         return [cmd]
@@ -101,6 +127,30 @@ class RomanizePlugin(BeetsPlugin):
         self.fetch_names(items)
         if self.config["titles"].get(bool):
             self.fetch_titles(items)
+
+    ### Tags ###
+
+    def on_write(self, item, path, tags):
+        _tags.write_tags(item, tags, self.tag_mode)
+
+    def sync_tags(self, items, pretend=False):
+        """Write the items whose files' tags differ from tag mode's."""
+        changed = 0
+        for item in items:
+            try:
+                diffs = _tags.differences(item, self.tag_mode)
+            except (OSError, UnreadableFileError) as e:
+                self._log.warning("{}: {}", item.filepath, e)
+                continue
+            if not diffs:
+                continue
+            changed += 1
+            ui.print_(format(item))
+            for key, (have, want) in sorted(diffs.items()):
+                ui.print_(f"  {key}: {_show(have)} -> {_show(want)}")
+            if not pretend:
+                item.try_sync(write=True, move=False)
+        self._log.info("{} {} files.", "Would write" if pretend else "Wrote", changed)
 
     ### Artist names ###
 
@@ -255,3 +305,11 @@ def _latin_func(field):
         # As beets formats lists: "a; b".
         return lambda obj: "; ".join(fields.latin(obj, field.key))
     return lambda obj: fields.latin(obj, field.key)
+
+
+def _show(value):
+    if value is None or value == "" or value == []:
+        return "(none)"
+    if isinstance(value, list):
+        return "; ".join(value)
+    return value

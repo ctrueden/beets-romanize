@@ -79,13 +79,14 @@ def latin(obj, key):
     field = FIELDS[key]
     value = obj.get(key)
     if field.multi:
-        return [_latin_value(field, v, obj) for v in value or []]
+        return [latin_value(field, v, obj) for v in value or []]
     if field.transl:
         value = text.latin_field(obj, key, field.transl)
-    return _latin_value(field, value, obj)
+    return latin_value(field, value, obj)
 
 
-def _latin_value(field, value, obj):
+def latin_value(field, value, obj=None):
+    """The Latin form of one value of a field (without looked-up titles)."""
     if not value or not isinstance(value, str):
         return value
     if field.kind == NAME:
