@@ -26,6 +26,54 @@ looks up what people have already written down before it guesses:
 
 Anything else non-ASCII (e.g. Korean, Cyrillic) is left for `asciify_paths`.
 
+## Example outcomes
+
+From a real library, comparing `asciify_paths` alone (unidecode), cutlet
+alone, and the plugin's result.
+
+**Transliteration from a pseudo-release.** Readings that only a person can
+know, because a word has several valid readings or is stylized:
+
+| Original             | unidecode                           | cutlet                       | beets-romanize                  |
+|----------------------|-------------------------------------|------------------------------|---------------------------------|
+| 明日は今日と同じ未来 | `Ming Ri haJin Ri toTong ziWei Lai` | `Asu wa kyou to onaji mirai` | `Ashita wa Kyou to Onaji Mirai` |
+| 漸-ZEN               | `Jian -ZEN`                         | `Susumu-ZEN`                 | `ZEN`                           |
+
+**Translation from a pseudo-release.** Made-up names and English titles
+written in katakana:
+
+| Original | unidecode | cutlet | beets-romanize |
+|---|---|---|---|
+| 灰羽連盟 サウンドトラック ハネノネ | `Hui Yu Lian Meng  saundotoratsuku hanenone` | `Haiwa renmei Saundo torakku Hane no ne` | `Haibane-Renmei Soundtrack HANENONE` |
+| LOVE☆トロピカ〜ナ デラックス | `LOVEtoropika~ na deratsukusu` | `LOVE(star)Toro pika~Na Derakkusu` | `Love Tropicana Deluxe` |
+| 桜蘭高校ホスト部 サントラ & キャラソン集 前編 | `Ying Lan Gao Xiao hosutoBu  santora & kiyarasonJi  Qian Bian` | `Sakura Ran koukou hosuto bu Santora & Kyarasonshuu Zenpen` | `Ouran High School Host Club Soundtrack & Character Song Collection <First Part>` |
+
+Where a release has both kinds, `prefer` chooses: 硝子の夢 becomes
+`Dream of Glass` (translation) or `Glass no Yume` (transliteration).
+
+**Romanization with cutlet.** With no pseudo-release, cutlet reads kanji as
+Japanese rather than Mandarin, and splits words:
+
+| Original             | unidecode                 | beets-romanize              |
+|----------------------|---------------------------|-----------------------------|
+| この誰もいない部屋で | `konoShui moinaiBu Wu de` | `Kono dare mo inai heya de` |
+| さよならを聴かせて   | `sayonarawoTing kasete`   | `Sayonara wo kikasete`      |
+| 愛のカケラ           | `Ai nokakera`             | `Ai no kakera`              |
+
+It is not perfect, though. These are better than unidecode, but still need
+an override or a pseudo-release:
+
+| Original              | unidecode            | beets-romanize          | Ideal                   |
+|-----------------------|----------------------|-------------------------|-------------------------|
+| ナイト・オブ・ナイツ  | `naito*obu*naitsu`   | `Naito.obu.naitsu`      | `Night of Knights`      |
+| カナコのサーフィンJPN | `kanakonosa-huinJPN` | `Kana ko no saafin JPN` | `Kanako no Surfin' JPN` |
+| ジェットにんぢん      | `zietsutonindin`     | `Jetto ni n ji n`       | `Jet Ninjin`            |
+
+English written in katakana is spelled as pronounced (`foreign_spelling`
+can help; see below), names can be split (カナコ, *Kanako*), and unfamiliar
+spellings (にんぢん, an old spelling of にんじん, *ninjin*) are read kana by
+kana.
+
 ## Setup
 
 1. Install the plugin into the same environment as beets. For Japanese
@@ -56,11 +104,11 @@ Anything else non-ASCII (e.g. Korean, Cyrillic) is left for `asciify_paths`.
 
 ## Path fields and functions
 
-| Field | For | Value |
-|---|---|---|
-| `$title_latin` | items | Latin form of the title |
-| `$artist_latin` | items | Latin form of the artist |
-| `$album_latin` | items, albums | Latin form of the album title |
+| Field                | For           | Value                          |
+|----------------------|---------------|--------------------------------|
+| `$title_latin`       | items         | Latin form of the title        |
+| `$artist_latin`      | items         | Latin form of the artist       |
+| `$album_latin`       | items, albums | Latin form of the album title  |
 | `$albumartist_latin` | items, albums | Latin form of the album artist |
 
 The template functions `%romanize{text}` and `%romanize_name{text}` romanize
