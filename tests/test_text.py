@@ -63,6 +63,43 @@ def test_romanize_name_prefers_override_then_alias():
     assert text.romanize_name("Already Latin") == "Already Latin"
 
 
+def test_romanize_name_known_credit_with_override(monkeypatch, config):
+    config["romanize"]["overrides"] = {
+        "天道あかね": "Akane Tendo",
+        "村井聖夜": "Murai Seiya",
+        "星野奏子": "Kanako Hoshino",
+    }
+    text.reset()
+    monkeypatch.setattr(
+        aliases,
+        "_names",
+        {
+            # A whole credit known from MusicBrainz, containing an override key.
+            "シャンプー, 天道あかね": "Shampoo, Akane Tendō",
+            "天道あかね": "Akane Tendō",
+            # Known, but with a bad Latin name for the override key.
+            "村井聖夜": "seiya-murai",
+            "村井聖夜 meets eimy": "seiya-murai meets eimy",
+            # A partly Latin credit, with the key itself left.
+            "SHINE feat. 星野奏子": "SHINE feat. H",
+            "星野奏子": "H",
+            # A credit learned when her Latin name was different.
+            "DJ X feat. 星野奏子": "DJ X feat. Q",
+        },
+    )
+    # The credit's MusicBrainz names are kept, and the override applied.
+    assert text.romanize_name("シャンプー, 天道あかね") == "Shampoo, Akane Tendo"
+    assert text.romanize_name("村井聖夜") == "Murai Seiya"
+    assert text.romanize_name("村井聖夜 meets eimy") == "Murai Seiya meets eimy"
+    # "H" is replaced as a whole word only, not inside SHINE.
+    assert text.romanize_name("SHINE feat. 星野奏子") == "SHINE feat. Kanako Hoshino"
+    # If the override's Latin form cannot be placed in the known credit, the
+    # overrides apply to the original credit instead.
+    assert text.romanize_name("DJ X feat. 星野奏子") == "DJ X feat. Kanako Hoshino"
+    # Unknown credits get the overrides, then romanization.
+    assert text.romanize_name("村井聖夜 & 誰か").startswith("Murai Seiya & ")
+
+
 def test_latin_field():
     item = {"title": "硝子の夢", "title_transl": "Dream of Glass"}
     assert text.latin_field(item, "title", "title_transl") == "Dream of Glass"

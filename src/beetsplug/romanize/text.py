@@ -139,13 +139,7 @@ def reset():
     _overrides = None
 
 
-def override(s):
-    """Apply the `romanize: overrides:` table from the beets config.
-
-    Overrides map original text (e.g. 矢井田瞳) to its Latin form (Hitomi
-    Yaida), anywhere in s. Longer keys take precedence over shorter ones they
-    contain.
-    """
+def _load_overrides():
     global _overrides
     if _overrides is None:
         try:
@@ -159,10 +153,44 @@ def override(s):
         _overrides = (
             (re.compile("|".join(map(re.escape, keys))), table) if keys else False
         )
-    if not _overrides or not s:
+    return _overrides
+
+
+def override(s):
+    """Apply the `romanize: overrides:` table from the beets config.
+
+    Overrides map original text (e.g. 矢井田瞳) to its Latin form (Hitomi
+    Yaida), anywhere in s. Longer keys take precedence over shorter ones they
+    contain.
+    """
+    overrides = _load_overrides()
+    if not overrides or not s:
         return s
-    pattern, table = _overrides
+    pattern, table = overrides
     return pattern.sub(lambda m: table[m.group()], s)
+
+
+def _override_known(s, known):
+    """Apply the overrides to `known`, the Latin form of s from the names
+    table: each override key in s has its Latin form from the names table
+    (or the key itself, if still there) replaced by the override's.
+
+    E.g. for 村井聖夜 meets eimy, known as "seiya-murai meets eimy", the
+    override 村井聖夜: Murai Seiya gives "Murai Seiya meets eimy".
+    """
+    overrides = _load_overrides()
+    if not overrides:
+        return known
+    pattern, table = overrides
+    for key in dict.fromkeys(pattern.findall(s)):
+        target = table[key]
+        known = known.replace(key, target)
+        latin = aliases.lookup(key)
+        if latin and latin != target:
+            # Whole words only: a name like "H" must not match inside others.
+            word = rf"(?<!\w){re.escape(latin)}(?!\w)"
+            known = re.sub(word, lambda m, target=target: target, known)
+    return known
 
 
 def symbols(s):
@@ -190,14 +218,34 @@ def romanize_name(s, obj=None):
     """A Latin form of an artist (or other) name.
 
     Prefers, in order: overrides, Latin names from MusicBrainz, and automatic
-    romanization with every word capitalized.
+    romanization with every word capitalized. A whole credit known from
+    MusicBrainz (e.g. "シャンプー, 天道あかね") is looked up before applying
+    overrides to it, which would stop it matching; the overrides then apply
+    to its parts.
     """
     if not s:
         return s
+    overrides = _load_overrides()
+    if overrides and s in overrides[1]:
+        return romanize(overrides[1][s], obj, name=True)
+    known = aliases.lookup(s) if not is_latin(s) else None
+    if known:
+        latin = _override_known(s, known)
+        if _has_overrides(s, latin):
+            return romanize(latin, obj, name=True)
     s = override(s)
     if not is_latin(s):
         s = aliases.lookup(s) or s
     return romanize(s, obj, name=True)
+
+
+def _has_overrides(s, latin):
+    """Whether the Latin form of s has the Latin forms of all overrides in s."""
+    overrides = _load_overrides()
+    if not overrides:
+        return True
+    pattern, table = overrides
+    return all(table[key] in latin for key in pattern.findall(s))
 
 
 def latin_field(obj, key, transl_key):
