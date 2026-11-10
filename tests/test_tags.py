@@ -153,6 +153,11 @@ def test_write_tags_romanizes_other_values():
     assert written == {"title": "LOVE(star)", "title_original": "LOVE☆"}
 
 
+def test_empty_lists():
+    assert tags._empty([]) and tags._empty([""]) and tags._empty(None)
+    assert not tags._empty(["", "梶浦由記"])
+
+
 def test_keys_are_media_fields():
     keys = tags.keys()
     assert "title" in keys and "composers" in keys

@@ -160,7 +160,11 @@ def _latin(item, key, value):
 
 
 def _empty(value):
-    return value is None or value == "" or value == []
+    # Note: Lists of empty strings count too. Older beets wrote an empty
+    # arranger to MP3s as a TIPL entry, which mediafile reads as [""].
+    if isinstance(value, list):
+        return all(_empty(v) for v in value)
+    return value is None or value == ""
 
 
 ### Syncing ###
