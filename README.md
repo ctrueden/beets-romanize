@@ -4,8 +4,10 @@
 [![PyPI](https://img.shields.io/pypi/v/beets-romanize.svg)](https://pypi.org/project/beets-romanize)
 [![Python Version](https://img.shields.io/pypi/pyversions/beets-romanize.svg)](https://python.org)
 
-A [beets](https://beets.io) plugin that gives your music Latin-script paths,
-while leaving the tags in their original scripts.
+A [beets](https://beets.io) plugin that gives your music Latin-script paths
+(and, optionally, tags), while your beets library keeps the metadata in its
+original scripts. (Unlike beets' `mbpseudo` plugin, which replaces it: see
+[Related](#related).)
 
 beets' `asciify_paths` option uses
 [unidecode](https://pypi.org/project/Unidecode/), which converts one character
@@ -263,11 +265,55 @@ Lookups are kept, so that paths stay the same until you ask otherwise:
 
 ## Related
 
-- beets' built-in [`mbpseudo`](https://beets.readthedocs.io/en/stable/plugins/mbpseudo.html)
-  plugin can import pseudo-release data directly, as tags or in place of the
-  original metadata. This plugin instead keeps the original tags and uses
-  pseudo-releases only for paths, with per-language preferences, and it works
-  for music already in the library.
+beets' built-in [`mbpseudo`](https://beets.readthedocs.io/en/stable/plugins/mbpseudo.html)
+plugin also uses MusicBrainz pseudo-releases, but for a different purpose:
+it *replaces* your metadata with the pseudo-release's, while beets-romanize
+*keeps* your metadata and adds Latin forms alongside it.
+
+With beets-romanize, the database still holds the original titles, so you
+can still search for them, and the Latin forms are available as fields:
+
+```
+$ beet ls -a -f '$album | $album_latin' 硝子
+硝子の夢 | Dream of Glass
+```
+
+With mbpseudo, if you pick the pseudo-release when importing, the album is
+stored as `Dream of Glass` (or `Glass no Yume`, whichever Latin-script
+pseudo-release MusicBrainz lists first), and `beet ls -a 硝子` finds
+nothing: the original titles are not kept. Its `custom_tags_only` option
+instead keeps the originals and adds `album_transl`, `title_transl` and
+`artist_transl` fields to the database and the files' tags, but they are not
+used in paths unless you write path formats around them, and they are empty
+for anything without a pseudo-release.
+
+Either way, mbpseudo takes only the album and track titles from the
+pseudo-release (and, with `import.languages`, artist aliases). Labels,
+composers and other people stay as on the original release, often in the
+original script, and are left to `asciify_paths`.
+
+| | mbpseudo | beets-romanize |
+|---|---|---|
+| Original metadata in the database | Replaced (kept with `custom_tags_only`) | Always kept |
+| Latin forms in the files' tags | Always (as the main tags, or as `*_transl` tags) | Only with `tags: yes`, which keeps the originals in `*_ORIGINAL` tags; undone by `beet write` |
+| When | Only while importing | While importing, or any time with `beet romanize` |
+| Which pseudo-release | The first in a wanted script | By language: translation or transliteration, per `languages` and `prefer` |
+| Without a pseudo-release | Nothing | Overrides, artist aliases, symbols, Japanese romanization (cutlet) |
+| Fields | Album and track titles, artists | Also disc titles, composers, lyricists, arrangers, remixers, labels... |
+
+So mbpseudo suits you if you would rather your library *were* the
+pseudo-release: if you want the English or romanized release as your
+metadata, and are importing music that has one. beets-romanize suits you if
+the original-script metadata is what you want to keep, and you want readable
+paths (and, optionally, readable tags) for all of it, including music
+already in your library and music with no pseudo-release.
+
+If you use mbpseudo to replace your metadata, beets-romanize can still fill
+in what it leaves alone: labels, composers and other people, and music with
+no pseudo-release. If you use its `custom_tags_only` mode, beets-romanize
+reads the `title_transl` and `album_transl` fields it writes, so switching
+keeps them, though beets-romanize replaces them where it finds a Latin title
+itself.
 
 ## Development
 
